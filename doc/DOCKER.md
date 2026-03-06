@@ -93,6 +93,32 @@ Notes:
 - Without API keys, the app still runs normally.
 - Adapter environment checks in Paperclip will surface missing auth/CLI prerequisites.
 
+## Image with all adapter CLIs
+
+Use `Dockerfile.with-clis` to build an image that includes every CLI needed for local adapters (Claude Code, Codex, Cursor, OpenCode), so you can run those agents inside the same container as the server.
+
+Build:
+
+```sh
+docker build -f Dockerfile.with-clis -t paperclip-with-clis .
+```
+
+Run with auth env vars so adapter runs work inside the container:
+
+```sh
+docker run --name paperclip \
+  -p 3100:3100 \
+  -e HOST=0.0.0.0 \
+  -e PAPERCLIP_HOME=/paperclip \
+  -e ANTHROPIC_API_KEY=... \
+  -e OPENAI_API_KEY=... \
+  -e CURSOR_API_KEY=... \
+  -v "$(pwd)/data/docker-paperclip:/paperclip" \
+  paperclip-with-clis
+```
+
+Included CLIs: `claude` (Claude Code), `codex` (OpenAI Codex), `agent` (Cursor), `opencode` (OpenCode). OpenCode may need additional provider keys depending on config (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Do not hardcode secrets in the image; pass them at runtime via `-e`.
+
 ## Onboard Smoke Test (Ubuntu + npm only)
 
 Use this when you want to mimic a fresh machine that only has Ubuntu + npm and verify:
