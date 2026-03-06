@@ -3,6 +3,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { createDb, instanceUserRoles, invites } from "@paperclipai/db";
+import { DEPLOYMENT_MODES, type DeploymentMode } from "@paperclipai/shared";
 import { readConfig, resolveConfigPath } from "../config/store.js";
 
 function hashToken(token: string) {
@@ -57,7 +58,15 @@ export async function bootstrapCeoInvite(opts: {
     return;
   }
 
-  if (config.server.deploymentMode !== "authenticated") {
+  const deploymentModeFromEnvRaw = process.env.PAPERCLIP_DEPLOYMENT_MODE;
+  const deploymentModeFromEnv =
+    deploymentModeFromEnvRaw && DEPLOYMENT_MODES.includes(deploymentModeFromEnvRaw as DeploymentMode)
+      ? (deploymentModeFromEnvRaw as DeploymentMode)
+      : null;
+  const deploymentMode: DeploymentMode =
+    deploymentModeFromEnv ?? config.server.deploymentMode ?? "local_trusted";
+
+  if (deploymentMode !== "authenticated") {
     p.log.info("Deployment mode is local_trusted. Bootstrap CEO invite is only required for authenticated mode.");
     return;
   }
