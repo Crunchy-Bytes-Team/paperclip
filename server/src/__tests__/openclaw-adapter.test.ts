@@ -196,6 +196,8 @@ describe("openclaw adapter execute", () => {
     expect(text).toContain("PAPERCLIP_TASK_ID=task-123");
     expect(text).toContain("PAPERCLIP_WAKE_REASON=issue_assigned");
     expect(text).toContain("PAPERCLIP_LINKED_ISSUE_IDS=issue-123");
+    expect(text).toContain("PAPERCLIP_API_KEY=<token from ~/.openclaw/workspace/paperclip-claimed-api-key.json>");
+    expect(text).toContain("Load PAPERCLIP_API_KEY from ~/.openclaw/workspace/paperclip-claimed-api-key.json");
   });
 
   it("uses paperclipApiUrl override when provided", async () => {
@@ -254,6 +256,55 @@ describe("openclaw adapter execute", () => {
     expect(
       logs.some((line) => line.includes("[openclaw] outbound header keys:") && line.includes("x-openclaw-auth")),
     ).toBe(true);
+  });
+
+  it("logs outbound payload with sensitive fields redacted", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      sseResponse([
+        "event: response.completed\n",
+        'data: {"type":"response.completed","status":"completed"}\n\n',
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const logs: string[] = [];
+    const result = await execute(
+      buildContext(
+        {
+          url: "https://agent.example/sse",
+          method: "POST",
+          headers: {
+            "x-openclaw-auth": "gateway-token",
+          },
+          payloadTemplate: {
+            text: "task prompt",
+            nested: {
+              token: "secret-token",
+              visible: "keep-me",
+            },
+          },
+        },
+        {
+          onLog: async (_stream, chunk) => {
+            logs.push(chunk);
+          },
+        },
+      ),
+    );
+
+    expect(result.exitCode).toBe(0);
+
+    const headerLog = logs.find((line) => line.includes("[openclaw] outbound headers (redacted):"));
+    expect(headerLog).toBeDefined();
+    expect(headerLog).toContain("\"x-openclaw-auth\":\"[redacted");
+    expect(headerLog).toContain("\"authorization\":\"[redacted");
+    expect(headerLog).not.toContain("gateway-token");
+
+    const payloadLog = logs.find((line) => line.includes("[openclaw] outbound payload (redacted):"));
+    expect(payloadLog).toBeDefined();
+    expect(payloadLog).toContain("\"token\":\"[redacted");
+    expect(payloadLog).not.toContain("secret-token");
+    expect(payloadLog).toContain("\"visible\":\"keep-me\"");
   });
 
   it("derives Authorization header from x-openclaw-auth when webhookAuthHeader is unset", async () => {
@@ -330,6 +381,7 @@ describe("openclaw adapter execute", () => {
     expect(body.model).toBe("openclaw");
     expect(typeof body.input).toBe("string");
     expect(String(body.input)).toContain("PAPERCLIP_RUN_ID=run-123");
+    expect(String(body.input)).toContain("PAPERCLIP_API_KEY=<token from ~/.openclaw/workspace/paperclip-claimed-api-key.json>");
     expect(body.metadata).toBeTypeOf("object");
     expect((body.metadata as Record<string, unknown>).PAPERCLIP_RUN_ID).toBe("run-123");
     expect(body.text).toBeUndefined();
